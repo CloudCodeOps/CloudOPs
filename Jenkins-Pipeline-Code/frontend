@@ -59,9 +59,7 @@ pipeline {
                         sh '''
                             git config user.email "shubhamturale.edu@gmail.com"
                             git config user.name "CloudCodeOps"
-
-                            sed -i "s#image:.*#image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:${BUILD_NUMBER}#g" frontend-deploy-service.yaml
-
+                            sed -i "s#image:.*#image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:${BUILD_NUMBER}#g" frontend-deployment.yml
                             git add .
                             git commit -m "Update deployment image to version ${BUILD_NUMBER}"
                             git push https://${git_token}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git HEAD:main
