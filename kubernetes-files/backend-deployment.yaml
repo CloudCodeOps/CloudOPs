@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: backend
-        image: image: 540191526881.dkr.ecr.us-east-1.amazonaws.com/backend:IMAGE_TAG
+        image: 540191526881.dkr.ecr.us-east-1.amazonaws.com/backend:2
 
         ports:
         - containerPort: 80
