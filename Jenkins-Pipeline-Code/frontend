@@ -1,3 +1,4 @@
+```groovy
 pipeline {
     agent any
 
@@ -9,6 +10,9 @@ pipeline {
         GIT_REPO_NAME  = "CloudOPs"
         GIT_USER_NAME  = "CloudCodeOps"
         IMAGE_TAG      = "${BUILD_NUMBER}"
+
+        ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        FULL_IMAGE   = "${ECR_REGISTRY}/${ECR_REPO}:${IMAGE_TAG}"
     }
 
     stages {
@@ -30,8 +34,13 @@ pipeline {
             steps {
                 dir('client') {
                     sh '''
+                        echo "Building frontend Docker image..."
+
                         docker build \
                           -t ${IMAGE_NAME}:${IMAGE_TAG} .
+
+                        echo "Image created:"
+                        docker images | grep ${IMAGE_NAME}
                     '''
                 }
             }
@@ -40,19 +49,27 @@ pipeline {
         stage('ECR Image Pushing') {
             steps {
                 sh '''
+                    echo "Logging into ECR..."
+
                     aws ecr get-login-password \
                       --region ${AWS_REGION} \
                     | docker login \
                       --username AWS \
                       --password-stdin \
-                      ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+                      ${ECR_REGISTRY}
+
+                    echo "Tagging image..."
 
                     docker tag \
                       ${IMAGE_NAME}:${IMAGE_TAG} \
-                      ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:${IMAGE_TAG}
+                      ${FULL_IMAGE}
 
-                    docker push \
-                      ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:${IMAGE_TAG}
+                    echo "Pushing image to ECR..."
+
+                    docker push ${FULL_IMAGE}
+
+                    echo "Image pushed successfully:"
+                    echo ${FULL_IMAGE}
                 '''
             }
         }
@@ -69,22 +86,52 @@ pipeline {
                     ]) {
 
                         sh '''
+                            echo "Configuring Git..."
+
                             git config user.email "shubhamturale.edu@gmail.com"
                             git config user.name "CloudCodeOps"
 
-                            sed -i "s|image:.*|image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:${IMAGE_TAG}|" frontend-deployment.yml
-                           
+                            echo "Getting latest changes from GitHub..."
+
                             git pull --rebase origin main
+
+                            echo "Updating frontend Kubernetes deployment..."
+
+                            sed -i "s|^[[:space:]]*image:.*|        image: ${FULL_IMAGE}|" frontend-deployment.yml
+
+                            echo "New image:"
+                            grep "image:" frontend-deployment.yml
+
                             git add frontend-deployment.yml
 
-                            git diff --cached --quiet || \
-                            git commit -m "Update frontend image to ${IMAGE_TAG}"
+                            if git diff --cached --quiet; then
+                                echo "No changes to commit."
+                            else
+                                git commit -m "Update frontend image to ${IMAGE_TAG}"
 
-                            git push https://${GIT_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git HEAD:main
+                                git push \
+                                  https://${GIT_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git \
+                                  HEAD:main
+                            fi
                         '''
                     }
                 }
             }
         }
     }
+
+    post {
+        success {
+            echo "=========================================="
+            echo "Frontend CI/CD completed successfully!"
+            echo "Image: ${FULL_IMAGE}"
+            echo "Argo CD will deploy the new image."
+            echo "=========================================="
+        }
+
+        failure {
+            echo "Frontend CI/CD pipeline failed."
+        }
+    }
 }
+```
