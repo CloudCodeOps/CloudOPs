@@ -44,4 +44,4 @@ spec:
   selector:
     app: frontend
 
-  type: LoadBalance
+  type: LoadBalancer
