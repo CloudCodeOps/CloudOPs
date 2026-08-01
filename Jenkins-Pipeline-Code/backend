@@ -29,6 +29,24 @@ pipeline {
             }
         }
 
+        stage('Check for CI Skip') {
+            steps {
+                script {
+                    def lastAuthor = sh(script: "git log -1 --pretty=%an", returnStdout: true).trim()
+                    def lastMsg    = sh(script: "git log -1 --pretty=%B", returnStdout: true).trim()
+
+                    echo "Last commit author: ${lastAuthor}"
+                    echo "Last commit message: ${lastMsg}"
+
+                    if (lastMsg.contains('[skip ci]')) {
+                        echo "Detected CI bot's own commit (skip ci tag found) — skipping rebuild."
+                        currentBuild.result = 'NOT_BUILT'
+                        error("Stopping: this build was triggered by the deployment-file commit.")
+                    }
+                }
+            }
+        }
+
         stage('Docker Image Build') {
             steps {
                 dir('backend') {
@@ -106,11 +124,16 @@ pipeline {
                             if git diff --cached --quiet; then
                                 echo "No changes to commit."
                             else
-                                git commit -m "Update backend image to ${IMAGE_TAG}"
+                                git commit -m "Update backend image to ${IMAGE_TAG} [skip ci]"
 
-                                git push \
-                                  https://${GIT_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git \
-                                  HEAD:main
+                                for i in 1 2 3; do
+                                    git push \
+                                      https://${GIT_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git \
+                                      HEAD:main && break
+                                    echo "Push failed, retrying after rebase..."
+                                    git pull --rebase origin main
+                                    sleep 2
+                                done
                             fi
                         '''
                     }
