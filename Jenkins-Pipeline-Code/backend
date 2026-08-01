@@ -8,6 +8,7 @@ pipeline {
         IMAGE_NAME     = "backend"
         GIT_REPO_NAME  = "CloudOPs"
         GIT_USER_NAME  = "CloudCodeOps"
+        IMAGE_TAG      = "${BUILD_NUMBER}"
     }
 
     stages {
@@ -25,47 +26,60 @@ pipeline {
             }
         }
 
-        stage("Docker Image Build") {
+        stage('Docker Image Build') {
             steps {
                 dir('backend') {
                     sh '''
-                        docker system prune -f
-                        docker container prune -f
-                        docker build -t ${IMAGE_NAME} .
+                        docker build \
+                          -t ${IMAGE_NAME}:${IMAGE_TAG} .
                     '''
                 }
             }
         }
 
-        stage("ECR Image Pushing") {
+        stage('ECR Image Pushing') {
             steps {
                 sh '''
-                    aws ecr get-login-password --region ${AWS_REGION} \
-                    | docker login --username AWS --password-stdin \
-                    ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+                    aws ecr get-login-password \
+                      --region ${AWS_REGION} \
+                    | docker login \
+                      --username AWS \
+                      --password-stdin \
+                      ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
 
-                    docker tag ${IMAGE_NAME}:latest \
-                    ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:${BUILD_NUMBER}
+                    docker tag \
+                      ${IMAGE_NAME}:${IMAGE_TAG} \
+                      ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:${IMAGE_TAG}
 
                     docker push \
-                    ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:${BUILD_NUMBER}
+                      ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:${IMAGE_TAG}
                 '''
             }
         }
 
-        stage('Update Deployment file') {
+        stage('Update Deployment File') {
             steps {
                 dir('kubernetes-files') {
-                    withCredentials([string(credentialsId: 'my-git-pattoken', variable: 'git_token')]) {
+
+                    withCredentials([
+                        string(
+                            credentialsId: 'my-git-pattoken',
+                            variable: 'GIT_TOKEN'
+                        )
+                    ]) {
+
                         sh '''
                             git config user.email "shubhamturale.edu@gmail.com"
                             git config user.name "CloudCodeOps"
 
-                            sed -i "s#image:.*#image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:${BUILD_NUMBER}#g" backend-deployment.yaml
+                            sed -i "s|image:.*|image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:${IMAGE_TAG}|" backend-deployment.yaml
 
-                            git add .
-                            git commit -m "Update backend image to version ${BUILD_NUMBER}"
-                            git push https://${git_token}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git HEAD:main
+                            git add backend-deployment.yaml
+
+                            git diff --cached --quiet || \
+                            git commit -m "Update backend image to ${IMAGE_TAG}"
+
+                            git push https://${GIT_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git HEAD:main
                         '''
                     }
                 }
