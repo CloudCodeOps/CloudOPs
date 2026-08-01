@@ -73,7 +73,8 @@ pipeline {
                             git config user.name "CloudCodeOps"
 
                             sed -i "s|image:.*|image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:${IMAGE_TAG}|" frontend-deployment.yml
-
+                           
+                            git pull --rebase origin main
                             git add frontend-deployment.yml
 
                             git diff --cached --quiet || \
