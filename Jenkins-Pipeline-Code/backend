@@ -1,3 +1,4 @@
+```groovy
 pipeline {
     agent any
 
@@ -34,7 +35,9 @@ pipeline {
                 dir('backend') {
                     sh '''
                         echo "Building Docker image..."
-                        docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+
+                        docker build \
+                          -t ${IMAGE_NAME}:${IMAGE_TAG} .
 
                         echo "Image created:"
                         docker images | grep ${IMAGE_NAME}
@@ -73,7 +76,6 @@ pipeline {
 
         stage('Update Deployment File') {
             steps {
-
                 dir('kubernetes-files') {
 
                     withCredentials([
@@ -84,24 +86,33 @@ pipeline {
                     ]) {
 
                         sh '''
-                            echo "Updating Kubernetes deployment..."
+                            echo "Configuring Git..."
 
                             git config user.email "shubhamturale.edu@gmail.com"
                             git config user.name "CloudCodeOps"
 
-                            sed -i "s|^[[:space:]]*image:.*|        image: ${FULL_IMAGE}|" backend-deployment.yaml
+                            echo "Getting latest changes from GitHub..."
 
                             git pull --rebase origin main
 
-                            echo "Updated image:"
+                            echo "Updating Kubernetes deployment..."
+
+                            sed -i "s|^[[:space:]]*image:.*|        image: ${FULL_IMAGE}|" backend-deployment.yaml
+
+                            echo "New image:"
                             grep "image:" backend-deployment.yaml
 
                             git add backend-deployment.yaml
 
-                            git diff --cached --quiet || \
-                            git commit -m "Update backend image to ${IMAGE_TAG}"
+                            if git diff --cached --quiet; then
+                                echo "No changes to commit."
+                            else
+                                git commit -m "Update backend image to ${IMAGE_TAG}"
 
-                            git push https://${GIT_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git HEAD:main
+                                git push \
+                                  https://${GIT_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git \
+                                  HEAD:main
+                            fi
                         '''
                     }
                 }
@@ -123,3 +134,4 @@ pipeline {
         }
     }
 }
+```
