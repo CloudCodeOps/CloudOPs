@@ -1,0 +1,26 @@
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cloudops
+  namespace: argocd
+
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/CloudCodeOps/CloudOPs.git
+    targetRevision: main
+    path: kubernetes-files
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+```
